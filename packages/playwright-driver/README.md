@@ -34,6 +34,13 @@ Options passed as the second argument of `start()` override the driver's
 constructor launch options. The default pool does not support Puppeteer's
 cluster monitor; `monitor: true` throws.
 
+The pool's `timeout` covers page setup as well as evaluation. Timed-out jobs
+report an error, close their context, and release the concurrency slot for the
+next queued job. Closing the pool cancels active jobs, discards pending jobs,
+and settles existing `idle()` waiters. User hooks must still arrange cancellation
+of any external work they start; closing a browser cannot cancel arbitrary
+JavaScript promises.
+
 Ad blocking uses Ghostery's full ads, tracking, and annoyances lists. For offline
 or custom lists, pass a `PlaywrightBlocker` from `@ghostery/adblocker-playwright`
 as `blocker`. Blocking is applied to evaluation and crawler pages, including
@@ -56,6 +63,24 @@ The abandoned stealth and Puppeteer-extra integrations are not used. Passing
 
 See the [migration guide](../../README.md) and
 [optional Puppeteer backend](../puppeteer-driver/README.md).
+
+## Migration regression tests
+
+After building the monorepo and installing Chromium, run:
+
+```sh
+npm test --workspace @qualweb/playwright-driver
+npm test --workspace @qualweb/puppeteer-driver
+npm test --workspace @qualweb/cli
+npm run test:dependencies
+```
+
+The local-fixture suites check pool bounds, job isolation, timeout/setup/shutdown
+cleanup, plugin hooks, navigation, crawling, and CLI output. Cross-driver tests
+compare ACT, WCAG, best-practice, and counter reports under the implicit default
+and optional Puppeteer backend, using both URLs without explicit viewports and
+raw HTML. These deterministic checks do not replace live-site or cross-browser
+certification.
 
 ## License
 

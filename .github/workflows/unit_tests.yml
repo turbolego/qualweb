@@ -93,7 +93,16 @@ jobs:
         run: npm run -w @qualweb/locale test
 
       - name: "@qualweb/playwright-driver"
-        if: always() && (contains(env.AFFECTED_WORKSPACES, '@qualweb/playwright-driver') || contains(env.AFFECTED_WORKSPACES, '@qualweb/core'))
+        if: >-
+          always() && (
+            contains(env.AFFECTED_WORKSPACES, '@qualweb/playwright-driver') ||
+            contains(env.AFFECTED_WORKSPACES, '@qualweb/core') ||
+            contains(env.AFFECTED_WORKSPACES, '@qualweb/puppeteer-driver') ||
+            contains(env.AFFECTED_WORKSPACES, '@qualweb/act-rules') ||
+            contains(env.AFFECTED_WORKSPACES, '@qualweb/wcag-techniques') ||
+            contains(env.AFFECTED_WORKSPACES, '@qualweb/best-practices') ||
+            contains(env.AFFECTED_WORKSPACES, '@qualweb/counter')
+          )
         run: npm run -w @qualweb/playwright-driver test
 
       - name: "@qualweb/puppeteer-driver"

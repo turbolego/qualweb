@@ -3,6 +3,8 @@ import { execFile } from 'node:child_process';
 import { createServer, Server } from 'node:http';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 const execute = promisify(execFile);
 
@@ -68,5 +70,27 @@ describe('Playwright CLI', function () {
     const report = JSON.parse(stdout)[url];
     expect(report['@context']).to.not.be.undefined;
     expect(report['@graph']).to.be.an('array').and.have.length.greaterThan(0);
+  });
+
+  it('evaluates a URL file and writes complete JSON reports to the requested file', async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), 'qualweb-cli-'));
+    try {
+      const input = resolve(directory, 'urls.txt');
+      const output = resolve(directory, 'reports.json');
+      await writeFile(input, `${url}/first\n${url}/second\n`);
+      const { stdout } = await execute(process.execPath, [
+        resolve('dist/cli.js'), '--file', input, '--module', 'counter',
+        '--out-file', output, '--timeout', '10000',
+      ], { timeout: 45000 });
+      expect(stdout).to.equal('');
+      const reports = JSON.parse(await readFile(output, 'utf8'));
+      expect(Object.keys(reports)).to.have.members([`${url}/first`, `${url}/second`]);
+      for (const report of Object.values(reports)) {
+        expect(report).to.have.nested.property('system.page.dom.title', 'CLI fixture');
+        expect(report).to.have.nested.property('modules.counter.data.tags.h1', 1);
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
