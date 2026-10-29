@@ -1,5 +1,6 @@
-import type { Browser } from 'playwright';
-import type { ClusterOptions, DriverPage, DriverPool, EvaluationJobData } from '@qualweb/core/lib';
+import type { Browser, Page } from 'playwright';
+import type { ClusterOptions } from '../../ClusterOptions';
+import type { DriverPage, DriverPool, EvaluationJobData } from '../types';
 import { PlaywrightDriverPage } from './PlaywrightDriverPage';
 
 /**
@@ -24,11 +25,16 @@ export class PlaywrightDriverPool implements DriverPool {
 
   constructor(
     private readonly browser: Browser,
-    clusterOptions?: ClusterOptions
+    clusterOptions?: ClusterOptions,
+    private readonly setupPage?: (page: Page) => Promise<void>
   ) {
     this.maxConcurrency = clusterOptions?.maxConcurrency ?? 1;
     // Same default as puppeteer-cluster's job timeout in the Puppeteer driver.
     this.timeout = clusterOptions?.timeout ?? 60 * 1000;
+    if (!Number.isInteger(this.maxConcurrency) || this.maxConcurrency < 1 ||
+        !Number.isFinite(this.timeout) || this.timeout <= 0) {
+      throw new RangeError('Concurrency must be a positive integer and timeout must be positive.');
+    }
   }
 
   public async task(handler: (page: DriverPage, data: EvaluationJobData) => Promise<void>): Promise<void> {
@@ -37,7 +43,7 @@ export class PlaywrightDriverPool implements DriverPool {
 
   public queue(data: EvaluationJobData): void {
     if (this.closed) {
-      return;
+      throw new Error('Cannot queue evaluations on a closed browser pool.');
     }
     this.pending.push(data);
     this.pump();
@@ -78,7 +84,7 @@ export class PlaywrightDriverPool implements DriverPool {
       if (!this.handler) {
         throw new Error('No task handler was registered on the pool.');
       }
-      page = await PlaywrightDriverPage.create(this.browser, await this.getBrowserUserAgent());
+      page = await PlaywrightDriverPage.create(this.browser, await this.getBrowserUserAgent(), this.setupPage);
       await this.withTimeout(this.handler(page, data));
     } catch (error) {
       const wrapped = error instanceof Error ? error : new Error(String(error));
@@ -86,7 +92,16 @@ export class PlaywrightDriverPool implements DriverPool {
         handler(wrapped, data);
       }
     } finally {
-      await page?.dispose().catch(() => undefined);
+      try {
+        await page?.dispose();
+      } catch (error) {
+        if (!this.closed) {
+          const wrapped = error instanceof Error ? error : new Error(String(error));
+          for (const handler of this.errorHandlers) {
+            handler(wrapped, data);
+          }
+        }
+      }
     }
   }
 
